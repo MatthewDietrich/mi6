@@ -274,7 +274,7 @@ class Game:
             else:
                 die.set_blocked(False)
 
-    def _on_click(self) -> None:
+    def _on_left_click(self) -> None:
         hover_object = self._detect_hover()
 
         # Handle Button clicked
@@ -337,7 +337,7 @@ class Game:
                                 die.roll()
                                 die.set_blocked(True)
                                 self.instruction_text = (
-                                    "Choose a second Green die to reroll"
+                                    "Choose second Green die to reroll"
                                 )
                                 self.turn_mid_action = True
                         else:
@@ -350,7 +350,7 @@ class Game:
                                 self.turn_mid_action = False
                                 self.instruction_text = ""
                     case 4:
-                        if die.color != Die.BLUE:
+                        if die.color != Die.BLUE and not die.activated:
                             die.face(7 - die.value)
                             self.active_white.in_game = False
                             self.active_white = None
@@ -372,12 +372,12 @@ class Game:
                                     for die in self.dice[key]:
                                         die.set_blocked(False)
                                 self.active_white = None
-                                self.turn_mid_action = False
+                                self.turn_mid_action = True
 
                             # First non-blue Die has already been clicked
                             else:
                                 die.face(die.value - 2)
-                                self.turn_mid_action = True
+                                self.turn_mid_action = False
                                 self.instruction_text = ""
             else:  # White die not already activated
                 if die.color == Die.WHITE and not die.blocked:
@@ -397,7 +397,7 @@ class Game:
                             self.instruction_text = "Choose a non-Blue die to flip"
                         case 5:
                             self.instruction_text = (
-                                "Choose a non-Blue dice to increment by 2"
+                                "Choose a non-Blue die to increment by 2"
                             )
                         case 6:
                             for die in self.dice[Die.WHITE]:
@@ -405,6 +405,19 @@ class Game:
         self._resolve_green()
         self._resolve_blue()
         self._resolve_red()
+
+    def _on_right_click(self) -> None:
+        self._reset_action()
+
+    def _reset_action(self) -> None:
+        self.turn_mid_action = False
+        self.instruction_text = ""
+        if self.active_white is not None:
+            self.active_white.set_activated(False)
+        self.active_white = None
+        if self.active_green is not None:
+            self.active_green.set_activated(False)
+        self.active_green = None
 
     def run(self) -> None:
         """
@@ -418,11 +431,12 @@ class Game:
                     self.running = False
                 elif event.type == pygame.MOUSEMOTION:
                     self._detect_hover()
-                elif (
-                    event.type == pygame.MOUSEBUTTONDOWN
-                    and pygame.mouse.get_pressed()[0]
-                ):
-                    self._on_click()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    pressed = pygame.mouse.get_pressed()
+                    if pressed[0]:
+                        self._on_left_click()
+                    elif pressed[2]:
+                        self._on_right_click()
             self._draw()
             pygame.display.flip()
         self._exit()
