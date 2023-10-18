@@ -8,11 +8,60 @@ from src.objects.button import Button
 
 class Game:
     def __init__(self, players: int) -> None:
+        # Initialize pygame
         pygame.init()
         pygame.font.init()
 
+        # Initialize window and clock
+        self.window_size = (self.window_width, self.window_height) = WINDOW_SIZE
+        self.background_color = (1, 64, 50, 255)
+        self.display_surf = pygame.display.set_mode(self.window_size, pygame.DOUBLEBUF)
+        self.clock = pygame.time.Clock()
+        pygame.display.set_caption("Make It Six")
+
+        # Ensure correct player count
         if players not in range(2, 7):
             raise NotImplementedError("Game must have 2-6 players.")
+
+        # Initialize state variables
+        self.player_turn = 1
+        self.active_white = None
+        self.active_green = None
+        self.resolving_red_six = False
+        self.turn_pre_roll = True
+        self.turn_roll_count = 0
+        self.turn_mid_action = False
+        self.pre_tiebreak = False
+
+        # Initialize text objects
+        self.font = pygame.font.SysFont("Consolas", TEXT_SIZE)
+        self.hover_text = ""
+        self.hover_text_surf = self.font.render(self.hover_text, True, TEXT_COLOR)
+        self.status_text = f"Player {self.player_turn}'s turn"
+        self.status_text_surf = self.font.render(self.status_text, True, TEXT_COLOR)
+        self.instruction_text = "Click Roll to begin turn"
+
+        # Initialize buttons
+        self.buttons = {
+            "pass": Button(
+                (
+                    WINDOW_WIDTH - BUTTON_WIDTH - BUTTON_MARGIN,
+                    BUTTON_MARGIN,
+                ),
+                "Pass",
+                self.font,
+            ),
+            "roll": Button(
+                (
+                    WINDOW_WIDTH - BUTTON_WIDTH - BUTTON_MARGIN,
+                    2 * BUTTON_MARGIN + BUTTON_HEIGHT,
+                ),
+                "Roll",
+                self.font,
+            ),
+        }
+
+        # Initialize dice
         self.dice = {
             Die.RED: [
                 Die(
@@ -63,57 +112,15 @@ class Game:
                 for i in range(players)
             ],
         }
-        self.window_size = (self.window_width, self.window_height) = WINDOW_SIZE
-        self.background_color = (1, 64, 50, 255)
-        self.display_surf = pygame.display.set_mode(self.window_size, pygame.DOUBLEBUF)
-        self.clock = pygame.time.Clock()
-        pygame.display.set_caption("Make It Six")
-
-        self.font = pygame.font.SysFont("Consolas", TEXT_SIZE)
-        self.hover_text = ""
-        self.hover_text_surf = self.font.render(self.hover_text, True, TEXT_COLOR)
-        self.player_turn = 1
-        self.status_text = f"Player {self.player_turn}'s turn"
-        self.status_text_surf = self.font.render(self.status_text, True, TEXT_COLOR)
-        self.instruction_text = "Click Roll to begin turn"
-        self.active_white = None
-        self.active_green = None
-        self.resolving_red_six = False
-
-        self.buttons = {
-            "pass": Button(
-                (
-                    WINDOW_WIDTH - BUTTON_WIDTH - BUTTON_MARGIN,
-                    BUTTON_MARGIN,
-                ),
-                "Pass",
-                self.font,
-            ),
-            "roll": Button(
-                (
-                    WINDOW_WIDTH - BUTTON_WIDTH - BUTTON_MARGIN,
-                    2 * BUTTON_MARGIN + BUTTON_HEIGHT,
-                ),
-                "Roll",
-                self.font,
-            ),
-        }
-
         for die in self.dice[Die.BLUE]:
             die.face(1)
-        self.turn_pre_roll = True
-        self.turn_roll_count = 0
-        self.turn_mid_action = False
-        self.pre_tiebreak = False
 
-    def _exit(self):
+    def _exit(self) -> None:
         pygame.font.quit()
         pygame.quit()
 
-    def _draw(self) -> None:
-        self.display_surf.fill(self.background_color)
-
-        # Draw interface
+    def _draw_interface(self) -> None:
+        """Draws buttons and text."""
         for _, button in self.buttons.items():
             button.blit_to_surf(self.display_surf)
         self.display_surf.blit(
@@ -131,10 +138,9 @@ class Game:
             ),
         )
 
-        # Draw non-blue dice
-        if self.turn_pre_roll:
-            pass
-        else:
+    def _draw_dice(self) -> None:
+        if not self.turn_pre_roll:
+            # Handle cases where white die is already activated
             if self.active_white:
                 match self.active_white.value:
                     case 1:
@@ -152,6 +158,7 @@ class Game:
                             die.set_blocked(die.value >= 4)
                     case 6:
                         pass
+            # Draw non-blue dice
             for key in (Die.RED, Die.GREEN, Die.WHITE):
                 for die in self.dice[key]:
                     if die.in_game:
@@ -161,7 +168,13 @@ class Game:
         for die in self.dice[Die.BLUE]:
             die.blit_to_surf(self.display_surf)
 
+    def _draw(self) -> None:
+        self.display_surf.fill(self.background_color)
+        self._draw_interface()
+        self._draw_dice()
+
     def _roll_all(self) -> None:
+        """Performs initial roll of all non-blue dice."""
         for key in (Die.RED, Die.GREEN, Die.WHITE):
             for die in self.dice[key]:
                 die.roll()
@@ -171,9 +184,7 @@ class Game:
         self.instruction_text = "Choose a White die to activate, or click Reroll"
 
     def _reroll_white_and_red(self) -> None:
-        """
-        Rerolls all White and Red Dice and adds the second Red Die to the game.
-        """
+        """Rerolls all White and Red Dice and adds the second Red Die to the game."""
         self.dice[Die.RED][1].in_game = True
         for key in (Die.RED, Die.WHITE):
             for die in self.dice[key]:
@@ -181,7 +192,9 @@ class Game:
 
     def _detect_hover(self) -> Button | Die | None:
         """
-        Sets the hover text and returns the object the cursor is currently over, if any.
+        Sets and renders the hover text.
+
+        Returns the object the cursor is currently hovering over, if any.
         """
         hover_object = None
         self.hover_text = self.instruction_text
@@ -212,16 +225,12 @@ class Game:
         return hover_object
 
     def _set_status(self, status: str) -> None:
-        """
-        Set and re-render the status text.
-        """
+        """Sets and re-render the status text."""
         self.status_text = status
         self.status_text_surf = self.font.render(self.status_text, True, TEXT_COLOR)
 
     def _next_player_turn(self) -> None:
-        """
-        Passes the turn to the next player.
-        """
+        """Passes the turn to the next player."""
         if self.player_turn == NUM_PLAYERS:
             self.player_turn = 1
         else:
@@ -243,9 +252,11 @@ class Game:
             self._next_player_turn()
 
     def _resolve_blue(self) -> None:
+        """Detects win/tiebreak condition"""
         pass
 
     def _resolve_red(self) -> None:
+        # Handle red six
         if self.dice[Die.RED][0].value == 6 or self.dice[Die.RED][1].value == 6:
             player_die = self.dice[Die.BLUE][self.player_turn - 1]
             match player_die.value:
@@ -268,6 +279,7 @@ class Game:
                     self._next_player_turn()
                 case 6:
                     pass  # TODO: implement tiebreaker stuff
+        # Block white dice with same value as red dice
         for die in self.dice[Die.WHITE]:
             if die.value in (d.value for d in self.dice[Die.RED] if d.in_game):
                 die.set_blocked(True)
@@ -417,12 +429,11 @@ class Game:
         self.active_white = None
         if self.active_green is not None:
             self.active_green.set_activated(False)
+        # TODO: If one green rerolled by white 3 before reset, undo roll
         self.active_green = None
 
     def run(self) -> None:
-        """
-        Run main Game loop.
-        """
+        """Runs main Game loop."""
         self.running = True
         while self.running:
             self.clock.tick(60)
